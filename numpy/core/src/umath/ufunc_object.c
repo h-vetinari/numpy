@@ -83,13 +83,13 @@ typedef struct {
  * Output arguments are only passed if at least one is non-None.
  */
 static PyObject *
-_get_wrap_prepare_args(ufunc_full_args full_args) {
-    if (full_args.out == NULL) {
-        Py_INCREF(full_args.in);
-        return full_args.in;
+_get_wrap_prepare_args(const ufunc_full_args *full_args) {
+    if (full_args->out == NULL) {
+        Py_INCREF(full_args->in);
+        return full_args->in;
     }
     else {
-        return PySequence_Concat(full_args.in, full_args.out);
+        return PySequence_Concat(full_args->in, full_args->out);
     }
 }
 
@@ -269,7 +269,7 @@ _get_output_array_method(PyObject *obj, PyObject *method,
  * should just have PyArray_Return called.
  */
 static void
-_find_array_prepare(ufunc_full_args args,
+_find_array_prepare(const ufunc_full_args *args,
                     PyObject **output_prep, int nin, int nout)
 {
     int i;
@@ -279,7 +279,7 @@ _find_array_prepare(ufunc_full_args args,
      * Determine the prepping function given by the input arrays
      * (could be NULL).
      */
-    prep = _find_array_method(args.in, npy_um_str_array_prepare);
+    prep = _find_array_method(args->in, npy_um_str_array_prepare);
     /*
      * For all the output arrays decide what to do.
      *
@@ -292,7 +292,7 @@ _find_array_prepare(ufunc_full_args args,
      * exact ndarray so that no PyArray_Return is
      * done in that case.
      */
-    if (args.out == NULL) {
+    if (args->out == NULL) {
         for (i = 0; i < nout; i++) {
             Py_XINCREF(prep);
             output_prep[i] = prep;
@@ -301,7 +301,7 @@ _find_array_prepare(ufunc_full_args args,
     else {
         for (i = 0; i < nout; i++) {
             output_prep[i] = _get_output_array_method(
-                PyTuple_GET_ITEM(args.out, i), npy_um_str_array_prepare, prep);
+                PyTuple_GET_ITEM(args->out, i), npy_um_str_array_prepare, prep);
         }
     }
     Py_XDECREF(prep);
@@ -398,7 +398,7 @@ _ufunc_setup_flags(PyUFuncObject *ufunc, npy_uint32 op_in_flags,
  * should just have PyArray_Return called.
  */
 static int
-_find_array_wrap(ufunc_full_args args, PyObject *kwds,
+_find_array_wrap(ufunc_full_args *args, PyObject *kwds,
                 PyObject **output_wrap, int nin, int nout)
 {
     int i;
@@ -424,7 +424,7 @@ _find_array_wrap(ufunc_full_args args, PyObject *kwds,
      * Determine the wrapping function given by the input arrays
      * (could be NULL).
      */
-    wrap = _find_array_method(args.in, npy_um_str_array_wrap);
+    wrap = _find_array_method(args->in, npy_um_str_array_wrap);
 
     /*
      * For all the output arrays decide what to do.
@@ -439,7 +439,7 @@ _find_array_wrap(ufunc_full_args args, PyObject *kwds,
      * done in that case.
      */
 handle_out:
-    if (args.out == NULL) {
+    if (args->out == NULL) {
         for (i = 0; i < nout; i++) {
             Py_XINCREF(wrap);
             output_wrap[i] = wrap;
@@ -448,7 +448,7 @@ handle_out:
     else {
         for (i = 0; i < nout; i++) {
             output_wrap[i] = _get_output_array_method(
-                PyTuple_GET_ITEM(args.out, i), npy_um_str_array_wrap, wrap);
+                PyTuple_GET_ITEM(args->out, i), npy_um_str_array_wrap, wrap);
         }
     }
 
@@ -488,7 +488,7 @@ _apply_array_wrap(
         else {
             PyObject *args_tup;
             /* Call the method with appropriate context */
-            args_tup = _get_wrap_prepare_args(context->args);
+            args_tup = _get_wrap_prepare_args(&context->args);
             if (args_tup == NULL) {
                 goto fail;
             }
@@ -1350,7 +1350,7 @@ static int
 prepare_ufunc_output(PyUFuncObject *ufunc,
                     PyArrayObject **op,
                     PyObject *arr_prep,
-                    ufunc_full_args full_args,
+                    const ufunc_full_args *full_args,
                     int i)
 {
     if (arr_prep != NULL && arr_prep != Py_None) {
@@ -1417,7 +1417,7 @@ iterator_loop(PyUFuncObject *ufunc,
                     NPY_ORDER order,
                     npy_intp buffersize,
                     PyObject **arr_prep,
-                    ufunc_full_args full_args,
+                    const ufunc_full_args *full_args,
                     PyUFuncGenericFunction innerloop,
                     void *innerloopdata,
                     npy_uint32 *op_flags)
@@ -1558,7 +1558,7 @@ execute_legacy_ufunc_loop(PyUFuncObject *ufunc,
                     NPY_ORDER order,
                     npy_intp buffersize,
                     PyObject **arr_prep,
-                    ufunc_full_args full_args,
+                    const ufunc_full_args *full_args,
                     npy_uint32 *op_flags)
 {
     npy_intp nin = ufunc->nin, nout = ufunc->nout;
@@ -1720,7 +1720,7 @@ execute_fancy_ufunc_loop(PyUFuncObject *ufunc,
                     NPY_ORDER order,
                     npy_intp buffersize,
                     PyObject **arr_prep,
-                    ufunc_full_args full_args,
+                    const ufunc_full_args *full_args,
                     npy_uint32 *op_flags)
 {
     int i, nin = ufunc->nin, nout = ufunc->nout;
@@ -4728,7 +4728,7 @@ ufunc_generic_call(PyUFuncObject *ufunc, PyObject *args, PyObject *kwds)
     if (make_full_arg_tuple(&full_args, ufunc->nin, ufunc->nout, args, kwds) < 0) {
         goto fail;
     }
-    if (_find_array_wrap(full_args, kwds, wraparr, ufunc->nin, ufunc->nout) < 0) {
+    if (_find_array_wrap(&full_args, kwds, wraparr, ufunc->nin, ufunc->nout) < 0) {
         goto fail;
     }
 
